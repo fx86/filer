@@ -4,24 +4,25 @@
 '''
 import usb.core as we
 import os
-
+import usb.core
+import usb.backend.libusb1
 
 def get_devices():
-	'''
-		Returns a list of devices.
-	'''
-
-	devices = we.find(bDeviceClass=9, find_all=True)
-	devices_FOUND = sum([1 for _ in we.find(bDeviceClass=9, find_all=True)])
-	print "Found {:d} devices".format(devices_FOUND)
-
-	for dev in devices:
-		try:
-			#print dev
-			print dev.manufacturer, dev.product, dev.serial_number, dev.bDeviceClass
-		except (AttributeError, we.USBError) as error:
-			print str(error)
-			pass
+	busses = usb.busses()
+	for bus in busses:
+	    devices = bus.devices
+	    for dev in devices:
+	        if dev != None:
+	            try:
+	                xdev = usb.core.find(idVendor=dev.idVendor, idProduct=dev.idProduct)
+	                if xdev._manufacturer is None:
+	                    xdev._manufacturer = usb.util.get_string(xdev, xdev.iManufacturer)
+	                if xdev._product is None:
+	                    xdev._product = usb.util.get_string(xdev, xdev.iProduct)
+	                stx = '%6d %6d: '+str(xdev._manufacturer).strip()+' = '+str(xdev._product).strip()
+	                print stx % (dev.idVendor,dev.idProduct), xdev.bDeviceClass
+	            except:
+	                pass
 
 if __name__ == '__main__':
 	get_devices()
