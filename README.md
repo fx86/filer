@@ -4,7 +4,7 @@ Walks portable memory and provides easy search for laters. ;)
 * Uses pyusb to gather information about the portable memory.
 
 
-##### Search for a python package for USB:
+##### Search for a python package for USB polling:
 
 I'm looking for a package which accurately identifies USB drives. From the intensive googling that has been done recently by yours truly, I figure that the package should find devices of  deviceClass 9, its vendor and product IDs and the paths that they are mounted at. Maybe, their human-readable names as well. 
 
@@ -24,4 +24,8 @@ Weirdly, `usb.util.get_string(xdev, xdev.iManufacturer)` would work.
 2. [pyudev](https://pyudev.readthedocs.org/en/latest/):
 * Next up is pyudev. This seems like the *man for the job*. But I'm going to list all packages before coming back to evaluate this.
 
-3. 
+3. [python-libusb](https://github.com/vpelletier/python-libusb1):
+* This package has event polling. Could be very useful for launching scans as soon as a flash-drive is inserted. 
+* Would need to check if the polling would be effective if the device was inserted while the host was *sleeping* OR *hibernating*.
+* Also a plus is that fact that it is a direct Python implementation over libusb library. So, we would be covered on Linux and Mac.
+* Does it get me the paths ? 
