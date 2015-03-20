@@ -1,28 +1,35 @@
 '''
-	Detect and file all interesting artifacts from
-	USB drives
+    Detect and file all interesting artifacts from
+    USB drives
 '''
-import usb.core as we
-import os
-import usb.core
+import usb
 import usb.backend.libusb1
 
+
 def get_devices():
-	busses = usb.busses()
-	for bus in busses:
-	    devices = bus.devices
-	    for dev in devices:
-	        if dev != None:
-	            try:
-	                xdev = usb.core.find(idVendor=dev.idVendor, idProduct=dev.idProduct)
-	                if xdev._manufacturer is None:
-	                    xdev._manufacturer = usb.util.get_string(xdev, xdev.iManufacturer)
-	                if xdev._product is None:
-	                    xdev._product = usb.util.get_string(xdev, xdev.iProduct)
-	                stx = '%6d %6d: '+str(xdev._manufacturer).strip()+' = '+str(xdev._product).strip()
-	                print stx % (dev.idVendor,dev.idProduct), xdev.bDeviceClass
-	            except:
-	                pass
+    busses = usb.busses()
+    for bus in busses:
+        devices = bus.devices
+        for dev in devices:
+            vendor, product = dev.idVendor, dev.idProduct
+            print dev.deviceClass, dev.deviceClass == 9, vendor, product
+            if dev is None:
+                # and dev.deviceClass == 9:
+                try:
+                    xdev = usb.core.find(idVendor=vendor, idProduct=product)
+                    if xdev._manufacturer is None:
+                        xdev._manufacturer = usb.util.get_string(
+                            xdev, xdev.iManufacturer)
+                    if xdev._product is None:
+                        xdev._product = usb.util.get_string(
+                            xdev, xdev.iProduct)
+                    printstring = str(xdev._manufacturer).strip()
+                    printstring = ' = ' + str(xdev._product).strip()
+                    stx = '%6d %6d: ' + printstring
+                    print stx % (vendor, dev.idProduct)
+                    print dev.manufacturer
+                except:
+                    pass
 
 if __name__ == '__main__':
-	get_devices()
+    get_devices()
