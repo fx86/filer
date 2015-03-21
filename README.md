@@ -19,7 +19,4 @@ Goals:
 2. Write results to a database
 <<<<<<< HEAD
 3. Comprehensive file type detection
-4. HTML user interface with visualization
-=======
-3. Comprehensive file type detection
->>>>>>> 744b7952f8a8b7c7721e1287cdc6c59102e54e31
+

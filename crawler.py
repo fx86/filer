@@ -9,7 +9,7 @@ import csv
 import logging
 import platform
 import argparse
-from subprocess import Popen, PIPE, CalledProcessError
+from subprocess import check_output, CalledProcessError
 from collections import OrderedDict
 
 import magic  # python-magic
@@ -81,34 +81,49 @@ def run(cmd):
     '''
         Runs commands and returns results
     '''
-    proc = Popen(cmd.split(),
-                 stdout=PIPE,
-                 stderr=PIPE)
-    output, errors = proc.communicate()
-    returncode = proc.returncode
-    if returncode:
-        print " >> ", output
-        print " << ", errors
-        raise CalledProcessError(returncode, 'description')
-    return output
+    logging.info("RUNNING: %s" % cmd)
+    try:
+        return check_output(cmd, shell=True)
+    except CalledProcessError:
+        logging.error("CalledProcessError error occurred for %s" % cmd)
 
 
-def getdevicepath():
+# TODO: http://stackoverflow.com/questions/8785217/reliable-and-as-portable
+# -as-possible-way-to-map-from-device-name-to-mountpoint
+def getmountsonosx(device_identifier):
     '''
-        platform agnostic function that finds USB devices
+        gets mount points on osx
     '''
-    global DEVICES
+
+    # http://stackoverflow.com/questions/2600514/alternative-to-udev-functionality-on-osx
+    # TODO
+    # 1. Parse `system_profiler SPUSBDataType -xml`
+    #   a. for each device without `Built-In` param,
+    #      get `Mount Point`, manufacturer, vendor
+    # 2. if DEVICES is empty, save them in global variable DEVICEs
+    # 3. If new mount points appear, return [ [mp, vendor, prod, manuftr]]
+    pass
+
+
+def getmounstonlinux():
+    '''
+        get mounts on Linux
+    '''
+    # TODO
+    # 1. Parse OS utility
+    #   a. for each USB device get `Mount Point`, manufacturer, vendor
+    # 2. if DEVICES is empty, save them in global variable DEVICEs
+    # 3. If new mount points appear, return [ [mp, vendor, prod, manuftr]]
+    pass
+
+
+def getnewdevices():
     osname = platform.system()
-    print "OS name is:", osname, osname == 'Darwin'
     if osname == 'Darwin':
-        devices = run('diskutil list | grep /dev/')
+        return getmountsonosx()
     elif osname is 'Linux':
-        devices = run('ls -l /dev/disk/')
-
-    if DEVICES is None:
-        DEVICES = devices
-    else:
-        return [dev for dev in devices if dev not in DEVICES]
+        # TODO : find new USB devices on linux
+        return getmounstonlinux()
 
 
 def hotplug_callback(context, device, event):
@@ -117,13 +132,18 @@ def hotplug_callback(context, device, event):
         libusb1.LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT: 'left',
     }[event]
 
-    print "Device %s: %s" % (device_status, device)
-    if device_status == 'arrived':
-        usbdrive = getdevicepath()
-        writedata(usbdrive)
+    if libusb1.LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED:
+        print "Device %s: %s" % (device_status, device)
+        usbdrives = getnewdevices()
+        if usbdrives:
+            for device in usbdrives:
+                writedata('usbdevice.csv', device)
+    else:
+        print "Device left: ", device
 
 
 def writedata(filename, source):
+    print "In writedata ", filename, source
     logging.info("Crawling path: %s" % source)
     allpaths = getfilepaths(source)
     capturedata = CSVWriter(filename)
@@ -146,18 +166,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
     PATH, USB = args.path, args.usb
     STARTINGTIME = time.time()
-
+    print PATH, USB
     # Call to initialize the DEVICES global variable
-    getdevicepath()
+    print DEVICES
+    getnewdevices()
+    print DEVICES
 
     # TODO: device name should be derived from product and vendor IDs
     # Should be human readable.
     FILENAME = 'dev-type.csv'
     if PATH is not None:
-        writedata(FILENAME)
+        writedata(FILENAME, PATH)
 
     # Warning: This loop is buggy
     elif USB is not False:
+        print "USB mode, baby!"
         context = usb1.USBContext()
         if not context.hasCapability(libusb1.LIBUSB_CAP_HAS_HOTPLUG):
             print 'Hotplug support is missing. Please update libusb version.'
