@@ -1,5 +1,9 @@
 '''
     Crawls a given file path and gets meta data
+    Usage:
+        python crawler.py --usb True
+        OR
+        python crawler.py <path-to-directory>
 '''
 import sys
 import os
@@ -9,7 +13,6 @@ import csv
 import logging
 import platform
 import argparse
-from hashlib import md5
 from subprocess import check_output, CalledProcessError
 from collections import OrderedDict
 
@@ -17,6 +20,7 @@ import magic  # python-magic
 import usb1
 import libusb1
 
+md5 = hashlib.md5()
 KEYS = ['path', 'ctime', 'filetype', 'filesize', 'mtime', 'atime', 'digest']
 CACHE = {}
 
@@ -57,6 +61,17 @@ def getfilepaths(pth):
     return [os.path.join(dp, f) for dp, dn, fn in os.walk(pth) for f in fn]
 
 
+def checksum_md5(filename, blocksize=128 * md5.block_size):
+    '''
+        Get md5 digest of file
+    '''
+    md5 = hashlib.md5()
+    with open(filename, 'rb') as f:
+        for chunk in iter(lambda: f.read(blocksize), b''):
+            md5.update(chunk)
+    return md5.digest()
+
+
 def getmetadata(path):
     '''
         captures metadata of path received.
@@ -71,7 +86,7 @@ def getmetadata(path):
         for timestamp in ['atime', 'mtime', 'ctime']:
             metadata[timestamp] = time.asctime(time.localtime(eval(timestamp)))
         metadata['filetype'] = magic.from_file(path, mime=True)
-        metadata['digest'] = hashlib.md5(path).hexdigest()
+        metadata['digest'] = hashlib.md5(open(path)).digest()
         return metadata
     except Exception, error:
         logging.info('Error capturing metadata for %s' % path)

@@ -17,6 +17,5 @@ Goals:
 
 1. Crawl USB devices surreptiously
 2. Write results to a database
-<<<<<<< HEAD
 3. Comprehensive file type detection
 
