@@ -9,6 +9,7 @@ import csv
 import logging
 import platform
 import argparse
+from hashlib import md5
 from subprocess import check_output, CalledProcessError
 from collections import OrderedDict
 
@@ -17,7 +18,7 @@ import usb1
 import libusb1
 
 KEYS = ['path', 'ctime', 'filetype', 'filesize', 'mtime', 'atime', 'digest']
-DEVICES = []
+CACHE = {}
 
 
 class CSVWriter:
@@ -90,19 +91,36 @@ def run(cmd):
 
 # TODO: http://stackoverflow.com/questions/8785217/reliable-and-as-portable
 # -as-possible-way-to-map-from-device-name-to-mountpoint
-def getmountsonosx(device_identifier):
+def get_mounts_osx():
     '''
-        gets mount points on osx
+        parses system_profiler for mount information,
+        to get name, manufacturer and mount points.
+        Passes them to write_data to walk and save metadata.
     '''
+    from plistlib import readPlistFromString as rPFS
+    time.sleep(5)
+    alldetails = []
+    alldevices = rPFS(run('system_profiler SPUSBDataType -xml'))[0]['_items']
+    for num in range(len(alldevices)):
+        for dev in alldevices[num]['_items']:
+            if (dev.get('Built-in_Device') != 'Yes'):
+                temp = {'mount_point': [],
+                        'volume_name': [],
+                        'volume_uuid': []}
 
-    # http://stackoverflow.com/questions/2600514/alternative-to-udev-functionality-on-osx
-    # TODO
-    # 1. Parse `system_profiler SPUSBDataType -xml`
-    #   a. for each device without `Built-In` param,
-    #      get `Mount Point`, manufacturer, vendor
-    # 2. if DEVICES is empty, save them in global variable DEVICEs
-    # 3. If new mount points appear, return [ [mp, vendor, prod, manuftr]]
-    pass
+                for param in ['_name', 'manufacturer',
+                              'product_id', 'vendor_id']:
+                    temp[param] = dev.get(param)
+                if 'volumes' in dev:
+                    for ind, eachvol in enumerate(dev['volumes']):
+                        mp = dev['volumes'][ind].get('mount_point', '')
+                        name = dev['volumes'][ind].get('_name', '')
+                        vol_uuid = dev['volumes'][ind].get('volume_uuid', '')
+                        temp['mount_point'].append(mp)
+                        temp['volume_name'].append(name)
+                        temp['volume_uuid'].append(vol_uuid)
+                alldetails.append(temp)
+    return alldetails
 
 
 def getmounstonlinux():
@@ -117,39 +135,63 @@ def getmounstonlinux():
     pass
 
 
-def getnewdevices():
+def get_new_devices():
+    '''
+        Calls the right function based on the
+        platform.
+    '''
     osname = platform.system()
     if osname == 'Darwin':
-        return getmountsonosx()
+        return get_mounts_osx()
     elif osname is 'Linux':
         # TODO : find new USB devices on linux
         return getmounstonlinux()
+    else:
+        print "Not implemented for :", osname
+        return []
 
 
 def hotplug_callback(context, device, event):
-    device_status = {
-        libusb1.LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED: 'arrived',
-        libusb1.LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT: 'left',
-    }[event]
-
+    '''
+        libbusb call-back when device arrives / leaves.
+        On arrival, we crawl it.
+    '''
     if libusb1.LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED:
-        print "Device %s: %s" % (device_status, device)
-        usbdrives = getnewdevices()
+        usbdrives = get_new_devices()
         if usbdrives:
-            for device in usbdrives:
-                writedata('usbdevice.csv', device)
+            for dev in usbdrives:
+                for mnt, vol, uuid in zip(dev['mount_point'],
+                                          dev['volume_name'],
+                                          dev['volume_uuid']):
+                    key = md5("%s-%s-%s" % (mnt, vol, uuid)).hexdigest()
+                    created_on = os.stat(mnt).st_ctime
+                    if CACHE.get(key) < created_on:
+                        CACHE[key] = time.time()
+                        if mnt:
+                            filename = vol + " " + time.ctime(time.time())
+                            write_data(filename + '.csv', mnt)
+                    else:
+                        print "IGNORING cached device: ", vol
+                        logging.info("CACHED : %s" % mnt)
     else:
         print "Device left: ", device
 
 
-def writedata(filename, source):
-    print "In writedata ", filename, source
-    logging.info("Crawling path: %s" % source)
+def write_data(fname, source):
+    '''
+        Writes metadata for each file to a specific csv file
+    '''
+    mesg = "Crawling {:s}. Saving it to: {:s}".format(source, fname)
+    print mesg
+    logging.info(mesg)
     allpaths = getfilepaths(source)
-    capturedata = CSVWriter(filename)
+    capturedata = CSVWriter(fname)
     for path in allpaths:
         meta = getmetadata(path)
-        capturedata.writerow(meta)
+        if meta:
+            capturedata.writerow(meta)
+        else:
+            logging.info("Found no meta for path : %s" % path)
     capturedata.close()
 
 
@@ -166,17 +208,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     PATH, USB = args.path, args.usb
     STARTINGTIME = time.time()
-    print PATH, USB
-    # Call to initialize the DEVICES global variable
-    print DEVICES
-    getnewdevices()
-    print DEVICES
 
-    # TODO: device name should be derived from product and vendor IDs
-    # Should be human readable.
-    FILENAME = 'dev-type.csv'
+    FILENAME = 'dev-type ' + time.ctime(time.time()) + ".csv"
     if PATH is not None:
-        writedata(FILENAME, PATH)
+        write_data(FILENAME, PATH)
 
     # Warning: This loop is buggy
     elif USB is not False:
@@ -191,7 +226,7 @@ if __name__ == "__main__":
                 context.handleEvents()
         except (KeyboardInterrupt, SystemExit):
             print "Exiting.."
-            pass
+            sys.exit(1)
 
     TOTALTIME = time.time() - STARTINGTIME
     logging.info("Crawl completed in : %s" % TOTALTIME)
