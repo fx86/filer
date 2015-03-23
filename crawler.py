@@ -43,6 +43,7 @@ class CSVWriter:
     def writerow(self, row):
         try:
             self.writer.writerow(row)
+            self.csvfile.flush()
         except csv.Error as error:
             logging.info("CSV File Write: Failed")
             logging.info(error)
@@ -69,7 +70,7 @@ def checksum_md5(filename, blocksize=128 * md5.block_size):
     with open(filename, 'rb') as f:
         for chunk in iter(lambda: f.read(blocksize), b''):
             md5.update(chunk)
-    return md5.digest()
+    return md5.hexdigest()
 
 
 def getmetadata(path):
@@ -86,7 +87,7 @@ def getmetadata(path):
         for timestamp in ['atime', 'mtime', 'ctime']:
             metadata[timestamp] = time.asctime(time.localtime(eval(timestamp)))
         metadata['filetype'] = magic.from_file(path, mime=True)
-        metadata['digest'] = hashlib.md5(open(path)).digest()
+        metadata['digest'] = checksum_md5(path)
         return metadata
     except Exception, error:
         logging.info('Error capturing metadata for %s' % path)
@@ -224,7 +225,8 @@ if __name__ == "__main__":
     PATH, USB = args.path, args.usb
     STARTINGTIME = time.time()
 
-    FILENAME = 'dev-type ' + time.ctime(time.time()) + ".csv"
+    temp_filename = "".join([x if x.isalnum() else "_" for x in PATH])
+    FILENAME = temp_filename + time.ctime(time.time()) + ".csv"
     if PATH is not None:
         write_data(FILENAME, PATH)
 
